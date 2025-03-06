@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vrops-exporter
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vrops-exporter
+  namespace: monitoring
+  labels:
+    app: vrops-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vrops-exporter
+  template:
+    metadata:
+      labels:
+        app: vrops-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "vrops-exporter"
+        vault.hashicorp.com/agent-inject-secret-credentials: "secret/data/vrops"
+        vault.hashicorp.com/agent-inject-template-credentials: |
+          {{- with secret "secret/data/vrops" -}}
+          export VROPS_USERNAME="{{ .Data.data.username }}"
+          export VROPS_PASSWORD="{{ .Data.data.password }}"
+          {{- end -}}
+    spec:
+      serviceAccountName: vrops-exporter
+      containers:
+      - name: vrops-exporter
+        image: vrops-exporter:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args: 
+        - |
+          source /vault/secrets/credentials
+          /app/vrops-exporter --host "$(VROPS_HOST)" --username "$VROPS_USERNAME" --password "$VROPS_PASSWORD" --exporter-port 9000 --interval 300 --no-verify-ssl --batch-size 100 --worker-threads 5 --resource-batch-size 50 --metric-batch-size 1000
+        env:
+        - name: VROPS_HOST
+          value: "vrops.example.com"
+        ports:
+        - containerPort: 9000
+          name: metrics
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1Gi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vrops-exporter
+  namespace: monitoring
+  labels:
+    app: vrops-exporter
+spec:
+  selector:
+    app: vrops-exporter
+  ports:
+  - port: 9000
+    targetPort: 9000
+    name: metrics
+  type: ClusterIP
