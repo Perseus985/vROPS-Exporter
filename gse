@@ -1,0 +1,208 @@
+# To contribute improvements to CI/CD templates, please follow the Development guide at:
+# https://docs.gitlab.com/ee/development/cicd/templates.html
+# This specific template is located at:
+# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Terraform.gitlab-ci.yml
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: always  # Prevent pipeline run for push event
+    - when: never # Run pipeline for all other cases
+
+default:
+  tags:
+    - offen
+    - integratordev
+    - docker
+  retry:
+    max: 2
+    when: runner_system_failure
+
+
+image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry.gitlab.com/orca5874434/container-images/tofu/aria-automation-1.9.0:1.8.0
+cache:
+  key: "${TF_ROOT}"
+  paths:
+    - "${TF_ROOT}/.terraform/"
+    - "~./terraform.d/"
+
+variables:
+  TF_STATE_NAME: ${TF_ENV}-${TF_VRA}
+  IGNORE_TF_DEPRECATION_WARNING: true
+  PWSH_PROJECT_ID: 393
+  PWSH_PROJECT_NAME: "cldorserviceou"
+  PWSH_PROJECT_VERSION: "1.2.0"
+
+include:
+  - local: "opentofu/Base.latest.gitlab-ci.yml"
+  - template: Jobs/SAST-IaC.gitlab-ci.yml   # https://gitlab.com/gitlab-org/gitlab/blob/master/lib/gitlab/ci/templates/Jobs/SAST-IaC.gitlab-ci.yml
+  - local: ".gitlab/get_vra_token.yml"
+
+stages:
+  - getVraToken
+  - validate
+  - test
+  - build
+  - download-pwsh-module
+  - create-ou
+  - deploy
+  - status-set
+  - cleanup
+
+.tofu-inject-creds:
+  before_script:
+    - mkdir -p ${HOME}/.terraform.d
+    - cat "${TF_AUTH}" > "${HOME}/.terraform.d/credentials.tfrc.json"
+
+get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  environment:
+    name: $TF_STATE_NAME
+    action: prepare
+
+fmt:
+  extends: .opentofu:fmt
+  needs: []
+
+validate:
+  extends: .opentofu:validate
+  before_script:
+    - !reference [".tofu-inject-creds", "before_script"]
+  environment:
+    name: $TF_STATE_NAME
+    action: prepare
+
+ansible-lint:
+  image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/cldor-ansible-execution-environments:1.8.0
+  stage: test
+  script:
+    - cd ansible
+    - ansible-lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
+
+# rewrite image for job from included template to point to the gitlab container registry
+kics-iac-sast:
+  stage: test
+  image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry.gitlab.com/gitlab-org/security-products/analyzers/kics:5.12.0
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
+
+build:
+  extends: .opentofu:plan
+  environment:
+    name: $TF_STATE_NAME
+    action: prepare
+  before_script:
+    - !reference [".tofu-inject-creds", "before_script"]
+  script:
+    - gitlab-tofu plan
+    - gitlab-tofu plan-json
+    - gitlab-tofu show -json "plan.cache" > "${TF_ROOT}/orca_plan.json"
+    - |
+      cat "${TF_ROOT}/orca_plan.json" | jq -r '[.resource_changes[] | select(.change.actions==["create"] and .type == "vra_project" and (.module_address | test("terraform-cldom-vpconboarding"))) | .change.after.custom_properties.vpcId]' > "${TF_ROOT}/vpcCreateResources.json"
+    - |
+      cat "${TF_ROOT}/orca_plan.json" | jq -r '[.resource_changes[] | select(.change.actions==["delete"] and .type == "vra_project" and (.module_address | test("terraform-cldom-vpconboarding"))) | .change.before.custom_properties.vpcId]' > "${TF_ROOT}/vpcDeleteResources.json"
+    - |
+      cat "${TF_ROOT}/orca_plan.json" | jq -r '[.resource_changes[] | select(.change.actions==["create"] and .type == "vra_project" and (.module_address | test("terraform-cldom-cloudonboarding"))) | .change.after.custom_properties.cloudId]' > "${TF_ROOT}/cloudCreateResources.json"
+    - |
+      cat "${TF_ROOT}/orca_plan.json" | jq -r '[.resource_changes[] | select(.change.actions==["delete"] and .type == "vra_project" and (.module_address | test("terraform-cldom-cloudonboarding"))) | .change.before.custom_properties.cloudId]' > "${TF_ROOT}/cloudDeleteResources.json"
+    - |
+      cat "${TF_ROOT}/orca_plan.json" | jq -r '[.resource_changes[] | select(.change.actions==["create"] and .type == "vra_project" and (.module_address | test("terraform-cldom-applicationonboarding"))) | .change.after.custom_properties.applicationId]' > "${TF_ROOT}/appCreateResources.json"
+    - |
+      cat "${TF_ROOT}/orca_plan.json" | jq -r '[.resource_changes[] | select(.change.actions==["delete"] and .type == "vra_project" and (.module_address | test("terraform-cldom-applicationonboarding"))) | .change.before.custom_properties.applicationId]' > "${TF_ROOT}/appDeleteResources.json"
+    - |
+      jq -s 'add' "${TF_ROOT}/vpcCreateResources.json" "${TF_ROOT}/cloudCreateResources.json" "${TF_ROOT}/appCreateResources.json" > "${TF_ROOT}/statusCreate.json"
+    - |
+      jq -s 'add' "${TF_ROOT}/vpcDeleteResources.json" "${TF_ROOT}/cloudDeleteResources.json" "${TF_ROOT}/appDeleteResources.json" > "${TF_ROOT}/statusDelete.json"
+  artifacts:
+    # The next line, which disables public access to pipeline artifacts, may not be available everywhere.
+    # See: https://docs.gitlab.com/ee/ci/yaml/#artifactspublic
+    public: false
+    paths:
+      - ${TF_ROOT}/plan.cache
+      - ${TF_ROOT}/plan.json
+      - ${TF_ROOT}/status*.json
+    reports:
+      terraform: ${TF_ROOT}/plan.json
+
+.download-pwsh-module:
+  stage: download-pwsh-module
+  environment:
+    name: $TF_STATE_NAME
+    action: prepare
+  image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/cldor-toolbox-ubi8:0.5.0
+  before_script:
+    - |
+      if [ -z ${PCE_ENDPOINT} ]; then
+        echo "Exit! No PCE endpoint defined"
+        exit 0
+      fi
+  script:
+    - |
+      curl --user "${PWSH_DEPLOY_TOKEN}" \
+      "${CI_API_V4_URL}/projects/${PWSH_PROJECT_ID}/packages/generic/${PWSH_PROJECT_NAME}/${PWSH_PROJECT_VERSION}/CldOrServiceOU.tar.gz" \
+      -o ${PWSH_PROJECT_NAME}-${PWSH_PROJECT_VERSION}.tar.gz
+    - tar -ztvf ${PWSH_PROJECT_NAME}-${PWSH_PROJECT_VERSION}.tar.gz
+  artifacts:
+    name: "$CI_JOB_NAME artifacts from $CI_PROJECT_NAME on $CI_COMMIT_REF_SLUG"
+    expire_in: 1 day
+    when: always
+    paths:
+      - "${PWSH_PROJECT_NAME}-${PWSH_PROJECT_VERSION}.tar.gz"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - when: never
+
+.serviceou-creation:
+  image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/mcr.microsoft.com/powershell:7.4-ubi-8
+  stage: create-ou
+  environment:
+    name: $TF_STATE_NAME
+    action: prepare
+  before_script:
+    - |
+      if [ -z ${PCE_ENDPOINT} ]; then
+        echo "Exit! No PCE endpoint defined"
+        exit 0
+      fi
+    - command -v ssh-agent
+    - eval $(ssh-agent -s)
+    - chmod 400 "$PCE_SSH_PRIVATE_KEY"
+    - ssh-add "$PCE_SSH_PRIVATE_KEY"
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - cp "$PCE_SSH_KNOWN_HOSTS" ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+  script:
+    - tar -zxvf ${PWSH_PROJECT_NAME}-${PWSH_PROJECT_VERSION}.tar.gz -C /root/.local/share/powershell/Modules
+    - pwsh -Command "New-ServiceOU -PceServerName ${PCE_ENDPOINT} -UserName ${PCE_USERNAME} -Password ${PCE_PASSWORD} -GitlabApiUrl ${CI_API_V4_URL} -ProjectId 44 -PersonalAccessToken ${ACCESS_TOKEN_INVENTORY} -StatusFilePath ${TF_ROOT} -Verbose"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - when: never
+
+deploy:
+  extends: .opentofu:apply
+  environment:
+    name: $TF_STATE_NAME
+    action: start
+  before_script:
+    - !reference [".tofu-inject-creds", "before_script"]
+
+# .ansible-status-set:
+ansible-status-set:
+  stage: status-set
+  image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/cldor-ansible-execution-environments:1.8.0
+  script:
+    - cd consumer-partner-management/ansible
+    - ansible-playbook -e "gitlab_token=${ANSIBLE_GITLAB_TOKEN}" -e "gitlab_branch=${GITLAB_BRANCH:-'main'}" -e "gitlab_url=${CI_API_V4_URL}" -e "gitlab_environment=${TF_ENV}-${TF_VRA}" playbook.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - when: never
