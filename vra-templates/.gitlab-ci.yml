@@ -1,0 +1,73 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: always
+    - when: always  # Run pipeline for all cases
+
+default:
+  tags:
+    - docker
+
+image: registry.gitlab.com/your-org/container-images/tofu/vra-automation:latest
+cache:
+  key: "${TF_ROOT}"
+  paths:
+    - "${TF_ROOT}/.terraform/"
+    - "~./terraform.d/"
+
+variables:
+  IGNORE_TF_DEPRECATION_WARNING: true
+  TF_ROOT: ${CI_PROJECT_DIR}
+
+include:
+  - local: 'opentofu/Base.latest.gitlab-ci.yml'
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
+  - local: '.gitlab/get_vra_token.yml'
+  - local: 'environments/dev/.gitlab-ci.yml'
+  - local: 'environments/test/.gitlab-ci.yml'
+  - local: 'environments/staging/.gitlab-ci.yml'
+  - local: 'environments/prod/.gitlab-ci.yml'
+  - local: 'environments/dr/.gitlab-ci.yml'
+
+stages:
+  - getVraToken
+  - validate
+  - test
+  - plan
+  - apply
+  - cleanup
+
+.tofu-inject-creds:
+  before_script:
+    - mkdir -p ${HOME}/.terraform.d
+    - cat "${TF_AUTH}" > "${HOME}/.terraform.d/credentials.tfrc.json"
+
+get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  environment:
+    name: $TF_STATE_NAME
+    action: prepare
+
+fmt:
+  extends: .opentofu:fmt
+  needs: []
+
+ansible-lint:
+  image: your-registry/cldor-ansible-execution-environments:latest
+  stage: test
+  script:
+    - cd ansible
+    - ansible-lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
+
+kics-iac-sast:
+  stage: test
+  image: registry.gitlab.com/gitlab-org/security-products/analyzers/kics:latest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
