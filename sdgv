@@ -1,0 +1,305 @@
+# Revised File Structure:
+# ├── blueprints/
+# │   ├── web_server.yml           # Web server blueprint in YAML
+# │   ├── database.yml             # Database blueprint in YAML
+# │   ├── application_tier.yml     # App tier blueprint in YAML
+# │   └── ... (other blueprint YAML files)
+# ├── main.tf                      # Consolidated OpenTofu configuration
+# ├── variables.tf                 # Common variables
+# ├── outputs.tf                   # Outputs for all blueprints
+# ├── environments/
+# │   ├── dev/
+# │   │   ├── terraform.tfvars     # Dev environment variables
+# │   │   └── .gitlab-ci.yml       # Dev-specific CI/CD pipeline
+# │   ├── test/
+# │   │   ├── terraform.tfvars     # Test environment variables
+# │   │   └── .gitlab-ci.yml       # Test-specific CI/CD pipeline
+# │   ├── staging/
+# │   │   ├── terraform.tfvars     # Staging environment variables
+# │   │   └── .gitlab-ci.yml       # Staging-specific CI/CD pipeline
+# │   └── prod/
+# │       ├── terraform.tfvars     # Production environment variables
+# │       └── .gitlab-ci.yml       # Production-specific CI/CD pipeline
+# ├── modules/
+# │   └── vra_blueprint/
+# │       ├── main.tf
+# │       ├── variables.tf
+# │       └── outputs.tf
+# └── .gitlab-ci.yml               # Main CI/CD pipeline (includes environment pipelines)
+
+# Consolidated main.tf
+terraform {
+  required_providers {
+    vra = {
+      source = "vmware/vra"
+      version = "~> 0.5.0"
+    }
+  }
+  
+  backend "http" {
+    # Backend configuration will be provided via -backend-config
+  }
+}
+
+provider "vra" {
+  url = var.vra_url
+  refresh_token = var.vra_refresh_token
+  insecure = var.vra_insecure
+}
+
+# Local variable to determine which blueprints to deploy
+locals {
+  # Create a map of blueprint configurations
+  blueprints = {
+    web_server = var.deploy_web_server ? {
+      name = "web-server"
+      description = "Web server blueprint for ${var.environment} environment"
+      file_path = "${path.module}/blueprints/web_server.yml"
+    } : null
+    
+    database = var.deploy_database ? {
+      name = "database"
+      description = "Database blueprint for ${var.environment} environment"
+      file_path = "${path.module}/blueprints/database.yml"
+    } : null
+    
+    application_tier = var.deploy_application_tier ? {
+      name = "application-tier"
+      description = "Application tier blueprint for ${var.environment} environment"
+      file_path = "${path.module}/blueprints/application_tier.yml"
+    } : null
+    
+    # Add more blueprints as needed
+  }
+  
+  # Filter out null values (blueprints that shouldn't be deployed)
+  blueprints_to_deploy = {
+    for k, v in local.blueprints : k => v if v != null
+  }
+}
+
+# Deploy each blueprint using the module
+module "blueprints" {
+  source = "./modules/vra_blueprint"
+  
+  for_each = local.blueprints_to_deploy
+  
+  vra_url = var.vra_url
+  vra_refresh_token = var.vra_refresh_token
+  
+  blueprint_name = each.value.name
+  blueprint_description = each.value.description
+  project_id = var.project_id
+  environment = var.environment
+  
+  blueprint_file_path = each.value.file_path
+}
+
+# variables.tf
+variable "vra_url" {
+  type = string
+  description = "VRA server URL"
+}
+
+variable "vra_refresh_token" {
+  type = string
+  description = "VRA API refresh token"
+  sensitive = true
+}
+
+variable "vra_insecure" {
+  type = bool
+  description = "Whether to skip TLS verification"
+  default = false
+}
+
+variable "project_id" {
+  type = string
+  description = "VRA Project ID"
+}
+
+variable "environment" {
+  type = string
+  description = "Environment name (dev, test, staging, prod)"
+}
+
+# Flags to control which blueprints to deploy
+variable "deploy_web_server" {
+  type = bool
+  description = "Whether to deploy the web server blueprint"
+  default = true
+}
+
+variable "deploy_database" {
+  type = bool
+  description = "Whether to deploy the database blueprint"
+  default = true
+}
+
+variable "deploy_application_tier" {
+  type = bool
+  description = "Whether to deploy the application tier blueprint"
+  default = true
+}
+
+# outputs.tf
+output "blueprint_ids" {
+  description = "Map of blueprint names to their IDs"
+  value = {
+    for name, blueprint in module.blueprints : name => blueprint.blueprint_id
+  }
+}
+
+# Sample blueprint module (modules/vra_blueprint/main.tf)
+terraform {
+  required_providers {
+    vra = {
+      source = "vmware/vra"
+      version = "~> 0.5.0"
+    }
+  }
+}
+
+variable "vra_url" {
+  type = string
+  description = "VRA server URL"
+}
+
+variable "vra_refresh_token" {
+  type = string
+  description = "VRA API refresh token"
+  sensitive = true
+}
+
+variable "blueprint_name" {
+  type = string
+  description = "Name of the blueprint"
+}
+
+variable "blueprint_description" {
+  type = string
+  description = "Description of the blueprint"
+  default = ""
+}
+
+variable "blueprint_file_path" {
+  type = string
+  description = "Path to blueprint YAML file"
+}
+
+variable "project_id" {
+  type = string
+  description = "Project ID"
+}
+
+variable "environment" {
+  type = string
+  description = "Environment name (dev, test, staging, prod)"
+}
+
+# Read the blueprint YAML file
+data "local_file" "blueprint_yaml" {
+  filename = var.blueprint_file_path
+}
+
+# Process the YAML content with environment-specific values if needed
+locals {
+  # Simple replacement of environment placeholder in the YAML
+  blueprint_content = replace(data.local_file.blueprint_yaml.content, "{{environment}}", var.environment)
+}
+
+resource "vra_blueprint" "this" {
+  name        = "${var.environment}-${var.blueprint_name}"
+  description = var.blueprint_description
+  project_id  = var.project_id
+  content     = local.blueprint_content
+}
+
+output "blueprint_id" {
+  value = vra_blueprint.this.id
+}
+
+# Environment-specific config (environments/dev/terraform.tfvars)
+environment = "dev"
+vra_url = "https://vra-dev.example.com"
+project_id = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+vra_insecure = true
+deploy_web_server = true
+deploy_database = true
+deploy_application_tier = false  # Not deploying app tier in dev
+
+# Environment-specific GitLab CI file (environments/dev/.gitlab-ci.yml)
+.dev_defaults: &dev_defaults
+  variables:
+    ENVIRONMENT: dev
+    TOFU_PATH: "tofu"
+  before_script:
+    - ${TOFU_PATH} init -backend-config="environments/${ENVIRONMENT}/backend.tfvars"
+    - ${TOFU_PATH} workspace select ${ENVIRONMENT} || ${TOFU_PATH} workspace new ${ENVIRONMENT}
+
+dev:validate:
+  stage: validate
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  <<: *dev_defaults
+  script:
+    - ${TOFU_PATH} validate -var-file="environments/${ENVIRONMENT}/terraform.tfvars"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dev/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+dev:plan:
+  stage: plan
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  <<: *dev_defaults
+  script:
+    - ${TOFU_PATH} plan -var-file="environments/${ENVIRONMENT}/terraform.tfvars" -out=dev-plan.tfplan
+  artifacts:
+    paths:
+      - dev-plan.tfplan
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dev/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+dev:apply:
+  stage: apply
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  <<: *dev_defaults
+  script:
+    - ${TOFU_PATH} apply -auto-approve dev-plan.tfplan
+  dependencies:
+    - dev:plan
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dev/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+# Main GitLab CI file (.gitlab-ci.yml)
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+include:
+  - local: 'environments/dev/.gitlab-ci.yml'
+  - local: 'environments/test/.gitlab-ci.yml'
+  - local: 'environments/staging/.gitlab-ci.yml'
+  - local: 'environments/prod/.gitlab-ci.yml'
+
+# You would add similar GitLab CI files for test, staging, and prod environments
