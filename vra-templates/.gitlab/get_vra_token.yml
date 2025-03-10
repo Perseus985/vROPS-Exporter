@@ -1,0 +1,126 @@
+# Get vRA token using refresh token - base template
+.get-token-curl:
+  script:
+    - mkdir -p ${HOME}/.terraform.d
+    - |
+      # Get token using refresh token
+      echo "Getting vRA token from $VRA_URL"
+      TOKEN_RESPONSE=$(curl -s -X POST \
+        "$VRA_URL/iaas/api/login" \
+        -H "Content-Type: application/json" \
+        -d "{\"refreshToken\": \"$VRA_REFRESH_TOKEN\"}")
+      
+      # Extract token
+      TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.token')
+      
+      if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+        echo "Failed to get token. Response: $TOKEN_RESPONSE"
+        exit 1
+      fi
+      
+      # Store token in env variable for later use
+      export VRA_ACCESS_TOKEN="$TOKEN"
+      
+      # Create terraform credentials file
+      cat > "${HOME}/.terraform.d/credentials.tfrc.json" <<EOF
+      {
+        "credentials": {
+          "vra": {
+            "token": "$TOKEN"
+          }
+        }
+      }
+      EOF
+      
+      echo "Successfully obtained vRA token for $TF_STATE_NAME"
+
+# Environment-specific token jobs
+dev:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    VRA_URL: $VRA_DEV_URL
+    TF_STATE_NAME: dev-vra
+  environment:
+    name: dev-vra
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dev/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+test:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    VRA_URL: $VRA_TEST_URL
+    TF_STATE_NAME: test-vra
+  environment:
+    name: test-vra
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/test/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+staging:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    VRA_URL: $VRA_STAGING_URL
+    TF_STATE_NAME: staging-vra
+  environment:
+    name: staging-vra
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/staging/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+prod:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    VRA_URL: $VRA_PROD_URL
+    TF_STATE_NAME: prod-vra
+  environment:
+    name: prod-vra
+    action: prepare
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/prod/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+dr:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    VRA_URL: $VRA_DR_URL
+    TF_STATE_NAME: dr-vra
+  environment:
+    name: dr-vra
+    action: prepare
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dr/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
