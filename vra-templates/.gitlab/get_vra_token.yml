@@ -1,45 +1,42 @@
-# Get vRA token using refresh token - base template
+# Base template for getting vRA token
 .get-token-curl:
+  before_script:
+    - echo Prüfe ob die notwendigen Variablen gesetzt sind
+    - if [ -z ${TF_VAR_vra_url+x} ]; then echo "vra_url variable does not exist" && exit 1; fi
+    - if [ -z ${vra_username+x} ]; then echo "vra_username variable does not exist" && exit 1; fi
+    - if [ -z ${vra_password+x} ]; then echo "vra_password variable does not exist" && exit 1; fi
   script:
-    - mkdir -p ${HOME}/.terraform.d
     - |
-      # Get token using refresh token
-      echo "Getting vRA token from $VRA_URL"
-      TOKEN_RESPONSE=$(curl -s -X POST \
-        "$VRA_URL/iaas/api/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"refreshToken\": \"$VRA_REFRESH_TOKEN\"}")
-      
-      # Extract token
-      TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.token')
-      
-      if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
-        echo "Failed to get token. Response: $TOKEN_RESPONSE"
+      requestUrl=${TF_VAR_vra_url}/csp/gateway/am/api/login?access_token
+      echo "vRA URL = $requestUrl"
+      vraBody='{"username":"'"$vra_username"'","password":"'"$vra_password"'"}'
+      response=$(curl -k -X POST "$requestUrl" -H "Accept: application/json" -H "Content-Type: application/json" -s -d "$vraBody")
+      status=$(echo "$response" | jq -r '.status // empty')
+      error_description=$(echo "$response" | jq -r '.error_description // empty')
+      if [ "$status" != "" ]; then
+        echo -e "\e[31mFailed to retrieve vRA Refresh Token for $TF_VAR_vra_url!\e[0m"
+        echo -e "\e[31mStatus: $status\e[0m"
+        echo -e "\e[31mError Description: $error_description\e[0m"
         exit 1
+      else
+        VRA_REFRESH_TOKEN=$(echo "$response" | jq -r '.refresh_token')
+        echo "Successfully got vRA Refresh Token for $TF_VAR_vra_url!"
+        echo "TF_VAR_refresh_token=$VRA_REFRESH_TOKEN" >> vratoken.env
       fi
-      
-      # Store token in env variable for later use
-      export VRA_ACCESS_TOKEN="$TOKEN"
-      
-      # Create terraform credentials file
-      cat > "${HOME}/.terraform.d/credentials.tfrc.json" <<EOF
-      {
-        "credentials": {
-          "vra": {
-            "token": "$TOKEN"
-          }
-        }
-      }
-      EOF
-      
-      echo "Successfully obtained vRA token for $TF_STATE_NAME"
+
+  artifacts:
+    reports:
+      dotenv: vratoken.env
+    when: on_success
+  rules:
+    - when: always
 
 # Environment-specific token jobs
 dev:get-token:
   stage: getVraToken
   extends: .get-token-curl
   variables:
-    VRA_URL: $VRA_DEV_URL
+    TF_VAR_vra_url: $VRA_DEV_URL
     TF_STATE_NAME: dev-vra
   environment:
     name: dev-vra
@@ -57,7 +54,7 @@ test:get-token:
   stage: getVraToken
   extends: .get-token-curl
   variables:
-    VRA_URL: $VRA_TEST_URL
+    TF_VAR_vra_url: $VRA_TEST_URL
     TF_STATE_NAME: test-vra
   environment:
     name: test-vra
@@ -75,7 +72,7 @@ staging:get-token:
   stage: getVraToken
   extends: .get-token-curl
   variables:
-    VRA_URL: $VRA_STAGING_URL
+    TF_VAR_vra_url: $VRA_STAGING_URL
     TF_STATE_NAME: staging-vra
   environment:
     name: staging-vra
@@ -93,7 +90,7 @@ prod:get-token:
   stage: getVraToken
   extends: .get-token-curl
   variables:
-    VRA_URL: $VRA_PROD_URL
+    TF_VAR_vra_url: $VRA_PROD_URL
     TF_STATE_NAME: prod-vra
   environment:
     name: prod-vra
@@ -111,7 +108,7 @@ dr:get-token:
   stage: getVraToken
   extends: .get-token-curl
   variables:
-    VRA_URL: $VRA_DR_URL
+    TF_VAR_vra_url: $VRA_DR_URL
     TF_STATE_NAME: dr-vra
   environment:
     name: dr-vra
