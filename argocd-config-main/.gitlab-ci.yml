@@ -1,0 +1,48 @@
+default:
+  tags:
+    - integratordev
+    - docker
+    - offen
+
+include:
+  - component: $CI_SERVER_FQDN/Global/public/gitlab-components/yamllint/gitlab-ci-yamllint@1.4.0
+
+
+# extract-kps-rules:
+#   image:
+#     name: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry-1.docker.io/mikefarah/yq:4.44.6
+#     entrypoint: [""]
+#   stage: build
+#   script:
+#     - yq '.spec.target.template.data."alertmanager.yaml"' cosmo/app-resources/kube-prometheus-stack/manifests/ExternalSecrets-alertmanager-orca-config.yaml > alertmanager.yml
+#     - yq '.spec' cosmo/app-resources/kube-prometheus-stack/manifests/PrometheusRule-kps-orca-gitlab.rules.yaml  > prometheus.yml
+#     - yq -n '.scrape_configs = (load("cosmo/app-resources/kube-prometheus-stack/helm/values.yaml").prometheus.prometheusSpec.additionalScrapeConfigs | from_yaml)' > prometheus-config.yml
+#   artifacts:
+#     paths:
+#       - alertmanager.yml
+#       - prometheus.yml
+#       - prometheus-config.yml
+
+# validate-alertmanager-rules:
+#   image:
+#     name: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/quay.io/prometheus/alertmanager:v0.27.0
+#     entrypoint: [""]
+#   stage: test
+#   script:
+#     - amtool check-config alertmanager.yml
+
+# validate-prometheus-rules:
+#   image:
+#     name: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/quay.io/prometheus/prometheus:v3.1.0
+#     entrypoint: [""]
+#   stage: test
+#   script:
+#     - promtool check rules prometheus.yml
+
+# validate-prometheus-config:
+#   image:
+#     name: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/quay.io/prometheus/prometheus:v3.1.0
+#     entrypoint: [""]
+#   stage: test
+#   script:
+#     - promtool check config prometheus-config.yml

@@ -1,0 +1,200 @@
+fullnameOverride: kps-orca-bex
+
+global:
+  imageRegistry: "i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de"
+
+image:
+  repository: quay.io/prometheus/blackbox-exporter
+  tag: "v0.25.0"
+  pullPolicy: IfNotPresent
+  pullSecrets:
+    - "pullsecret-ociregistry"
+
+securityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+resources: {}
+# limits:
+#   memory: 300Mi
+# requests:
+#   memory: 50Mi
+
+priorityClassName: ""
+
+replicas: 1
+
+extraSecretMounts:
+  - name: custom-ca
+    mountPath: /etc/ssl/certs/root-certs.crt
+    subPath: "root-certs.crt"
+    secretName: pkibw-ca-certs
+    readOnly: true
+    defaultMode: 420
+  - name: gitlab-access-token
+    secretName: gitlab-access-token
+    mountPath: /etc/blackbox/gitlab-token
+    subPath: access-token
+    readOnly: true
+
+config:
+  modules:
+    http_2xx:
+      prober: http
+      timeout: 5s
+      http:
+        valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+        follow_redirects: true
+        preferred_ip_protocol: "ip4"
+        tls_config:
+          insecure_skip_verify: false
+          ca_file: /etc/ssl/certs/root-certs.crt
+    http_regexp_vro:
+      prober: http
+      timeout: 5s
+      http:
+        valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+        follow_redirects: true
+        preferred_ip_protocol: "ip4"
+        tls_config:
+          insecure_skip_verify: false
+          ca_file: /etc/ssl/certs/root-certs.crt
+        method: GET
+        fail_if_body_not_matches_regexp:
+          - '^{"state":"RUNNING","health-status":{"state":"OK".*'
+    icmp_ttl5:
+      prober: icmp
+      timeout: 5s
+      icmp:
+        ttl: 5
+    tcp_ttl5:
+      prober: tcp
+      timeout: 5s
+      tcp:
+        preferred_ip_protocol: "ip4"
+        tls: true
+        tls_config:
+          insecure_skip_verify: false
+          ca_file: /etc/ssl/certs/root-certs.crt
+    dns_soa_intdev:
+      prober: dns
+      dns:
+        query_name: "intdev.cloud.bwi.intranet-bw.de"
+        query_type: "SOA"
+    dns_soa_provdev:
+      prober: dns
+      dns:
+        query_name: "provdev.cloud.bwi.intranet-bw.de"
+        query_type: "SOA"
+    gitlab_pipeline_check:
+      prober: http
+      timeout: 5s
+      http:
+        valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+        follow_redirects: true
+        method: GET
+        authorization:
+          credentials_file: "/etc/blackbox/gitlab-token"
+        fail_if_body_matches_regexp:
+          - '"status":"failed"'
+
+serviceMonitor:
+  ## If true, a ServiceMonitor CRD is created for a prometheus operator
+  ## https://github.com/coreos/prometheus-operator for blackbox-exporter itself
+  ##
+  selfMonitor:
+    enabled: true
+  ## If true, a ServiceMonitor CRD is created for a prometheus operator
+  ## https://github.com/coreos/prometheus-operator for each target
+  ##
+  enabled: false
+
+  # Default values that will be used for all ServiceMonitors created by `targets`
+  defaults:
+    additionalMetricsRelabels: {}
+    additionalRelabeling: []
+    labels: {}
+    interval: 30s
+    scrapeTimeout: 30s
+    module: http_2xx
+  ## scheme: HTTP scheme to use for scraping. Can be used with `tlsConfig` for example if using istio mTLS.
+  scheme: http
+  ## path: HTTP path. Needs to be adjusted, if web.route-prefix is set
+  path: "/probe"
+  ## tlsConfig: TLS configuration to use when scraping the endpoint. For example if using istio mTLS.
+  ## Of type: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#tlsconfig
+  tlsConfig: {}
+  bearerTokenFile:
+
+  targets:
+#    - name: example                    # Human readable URL that will appear in Prometheus / AlertManager
+#      url: http://example.com/healthz  # The URL that blackbox will scrape
+#      hostname: example.com            # HTTP probes can accept an additional `hostname` parameter that will set `Host` header and TLS SNI
+#      labels: {}                       # Map of labels for ServiceMonitor. Overrides value set in `defaults`
+#      interval: 60s                    # Scraping interval. Overrides value set in `defaults`
+#      scrapeTimeout: 60s               # Scrape timeout. Overrides value set in `defaults`
+#      module: http_2xx                 # Module used for scraping. Overrides value set in `defaults`
+#      additionalMetricsRelabels: {}    # Map of metric labels and values to add
+#      additionalRelabeling: []         # List of metric relabeling actions to run
+
+## Custom PrometheusRules to be defined
+## ref: https://github.com/coreos/prometheus-operator#customresourcedefinitions
+prometheusRule:
+  enabled: false
+  additionalLabels: {}
+  namespace: ""
+  rules: []
+
+podMonitoring:
+  ## If true, a PodMonitoring CR is created for google managed prometheus
+  ## https://cloud.google.com/stackdriver/docs/managed-prometheus/setup-managed#gmp-pod-monitoring for blackbox-exporter itself
+  ##
+  selfMonitor:
+    enabled: false
+    additionalMetricsRelabels: {}
+    labels: {}
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 30s
+
+  ## If true, a PodMonitoring CR is created for a google managed prometheus
+  ## https://cloud.google.com/stackdriver/docs/managed-prometheus/setup-managed#gmp-pod-monitoring for each target
+  ##
+  enabled: false
+
+  ## Default values that will be used for all PodMonitoring created by `targets`
+  ## Following PodMonitoring API specs https://github.com/GoogleCloudPlatform/prometheus-engine/blob/main/doc/api.md#scrapeendpoint
+  defaults:
+    additionalMetricsRelabels: {}
+    labels: {}
+    interval: 30s
+    scrapeTimeout: 30s
+    module: http_2xx
+  ## scheme: Protocol scheme to use to scrape.
+  scheme: http
+  ## path: HTTP path. Needs to be adjusted, if web.route-prefix is set
+  path: "/probe"
+  ## tlsConfig: TLS configuration to use when scraping the endpoint. For example if using istio mTLS.
+  ## Of type: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#tlsconfig
+  tlsConfig: {}
+
+  targets:
+    - name: aap-review-metrics
+      url: https://config.i0000007vpc0000038.svc.intdev.cloud.bwi.intranet-bw.de/api/v2/metrics/
+
+configReloader:
+  enabled: true
+  image:
+    repository: quay.io/prometheus-operator/prometheus-config-reloader
+    tag: "v0.79.2"
+    pullPolicy: IfNotPresent
+    digest: ""
+  resources:
+    limits:
+      memory: 50Mi
+    requests:
+      cpu: 10m
+      memory: 20Mi
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault

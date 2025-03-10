@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-notification-policies
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert-notification-policies.yaml: |-
+    apiVersion: 1
+    policies:
+        - orgId: 1
+          receiver: grafana-default-email
+          group_by:
+            - grafana_folder
+            - alertname
+          routes:
+            - receiver: ORCA Contact
+              group_by:
+                - grafana_folder
+                - alertname
+              object_matchers:
+                - ['managedBy', '=', 'ORCA']
+              mute_time_intervals:
+                - ORCA

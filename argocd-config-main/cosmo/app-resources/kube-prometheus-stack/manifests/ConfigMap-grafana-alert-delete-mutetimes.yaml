@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-delete-mutetimes
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert-delete-mutetimes.yaml: |-
+    apiVersion: 1
+    deleteMuteTimes:
+      - orgId: 1
+        name: mti_1

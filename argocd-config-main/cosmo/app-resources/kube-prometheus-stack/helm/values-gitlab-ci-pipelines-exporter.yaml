@@ -1,0 +1,55 @@
+image:
+  repository: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/quay.io/mvisonneau/gitlab-ci-pipelines-exporter
+  tag: v0.5.9
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: "pullsecret-ociregistry"
+
+envVariables:
+  - name: SSL_CERT_FILE
+    value: /etc/ssl/certs/root-certs.crt
+
+extraSecretMounts:
+  - name: custom-ca
+    mountPath: /etc/ssl/certs/root-certs.crt
+    subPath: "root-certs.crt"
+    secretName: pkibw-ca-certs
+    readOnly: true
+    defaultMode: 420
+
+config:
+  log:
+    level: debug
+    format: text
+  gitlab:
+    url: https://provgitlab.sgw.cloud.bwi.intranet-bw.de
+    enable_health_check: false
+    enable_tls_verify: false
+  # projects:
+  #   - name: foo/project
+  #   - name: bar/project
+  wildcards:
+    - {}
+
+# -- name of a `Secret` containing the GitLab token in the `gitlabToken` field (required unless `config.gitlab.token` is specified)
+gitlabSecret: "gcpe-access-token"
+
+securityContext:
+  # allowPrivilegeEscalation: false
+  # capabilities:
+  #   drop:
+  #     - ALL
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+redis:
+  # redis.enabled -- deploy a redis statefulset
+  enabled: false

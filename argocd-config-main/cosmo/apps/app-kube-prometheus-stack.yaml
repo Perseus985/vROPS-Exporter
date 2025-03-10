@@ -1,0 +1,68 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd-integrator
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: integrator
+  syncPolicy:
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+      annotations:
+        linkerd.io/inject: enabled
+    automated:
+      prune: true  # Specifies if resources should be pruned during auto-syncing ( false by default ).
+      selfHeal: true  # Specifies if partial app sync should be executed when resources are changed only in target Kubernetes cluster and no git change detected ( false by default ).
+    syncOptions:
+      - ApplyOutOfSyncOnly=true  # Specifies if applies every object in the application or only out of sync.
+      - CreateNamespace=true
+  destination:
+    namespace: monitoring
+    server: https://kubernetes.default.svc
+  ignoreDifferences:
+    - group: discovery.k8s.io
+      kind: EndpointSlice
+      jqPathExpressions:
+        - .endpoints[]?.conditions
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+  sources:
+    - repoURL: 'https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config'
+      targetRevision: main
+      path: cosmo/app-resources/kube-prometheus-stack/manifests
+    # helm chart values
+    - repoURL: 'https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config'
+      targetRevision: main
+      ref: values
+    # kube-prometheus-stack helm chart
+    - repoURL: 'https://artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/repository/i0000007-chart-scanned'
+      chart: kube-prometheus-stack
+      targetRevision: 67.8.0
+      helm:
+        releaseName: kps-orca
+        valueFiles:
+          - $values/cosmo/app-resources/kube-prometheus-stack/helm/values.yaml
+    # blackbox-exporter helm chart
+    - repoURL: 'https://artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/repository/i0000007-chart-scanned'
+      targetRevision: 9.1.0
+      chart: prometheus-blackbox-exporter
+      helm:
+        releaseName: bex
+        valueFiles:
+          - $values/cosmo/app-resources/kube-prometheus-stack/helm/values-blackbox-exporter.yaml
+    # gitlab ci pipeline exporter
+    - chart: gitlab-ci-pipelines-exporter
+      repoURL: "https://artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/repository/i0000007-chart-scanned"
+      targetRevision: 1.1.0
+      helm:
+        valueFiles:
+          - $values/cosmo/app-resources/kube-prometheus-stack/helm/values-gitlab-ci-pipelines-exporter.yaml

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-delete-rules
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert-delete-rules.yaml: |-
+    apiVersion: 1
+    deleteRules:
+      - orgId: 1
+        uid: beees3ou10h6oa

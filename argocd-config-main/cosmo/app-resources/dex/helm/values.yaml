@@ -1,0 +1,107 @@
+# -- Number of replicas (pods) to launch.
+replicaCount: 1
+
+image:
+  # -- Name of the image repository to pull the container image from.
+  repository: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry-1.docker.io/dexidp/dex
+
+  # -- [Image pull policy](https://kubernetes.io/docs/concepts/containers/images/#updating-images) for updating already existing images on a node.
+  pullPolicy: IfNotPresent
+
+  # -- Image tag override for the default value (chart appVersion).
+  tag: v2.41.1
+
+# -- Reference to one or more secrets to be used when [pulling images](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-pod-that-uses-your-secret) (from private registries).
+imagePullSecrets:
+  - name: "pullsecret-ociregistry"
+
+# configSecret:
+#   # -- Enable creating a secret from the values passed to `config`.
+#   # If set to false, name must point to an existing secret.
+#   create: false
+#   name: 'dex'
+
+config:
+  issuer: https://dex.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+  storage:
+    type: memory
+  connectors:
+    - type: ldap
+      id: ldap-padi-intdev
+      name: ldap-padi-intdev
+      config:
+        host: $EXT_DEX_LDAP_HOST:636
+        insecureSkipVerify: false
+        bindDN: $EXT_DEX_LDAP_BINDDN
+        bindPW: $EXT_DEX_LDAP_BINDPW
+        usernamePrompt: ProviderAD User (cip000*a)
+        userSearch:
+          baseDN: $EXT_DEX_LDAP_BASEDN
+          filter: "(objectClass=person)"
+          username: cn
+          idAttr: cn
+          emailAttr: mail
+          nameAttr: cn
+        groupSearch:
+          baseDN: $EXT_DEX_LDAP_BASEDN
+          filter: "(objectClass=group)"
+          userAttr: DN
+          groupAttr: member
+          nameAttr: cn
+  staticClients:
+    - id: grafana
+      secretEnv: EXT_DEX_GRAFANA_SECRET
+      name: 'Grafana'
+      redirectURIs:
+        - 'https://grafana.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de/login/generic_oauth'
+    - id: grafana-kps
+      secretEnv: EXT_DEX_GRAFANA_SECRET
+      name: 'Grafana KPS'
+      redirectURIs:
+        - 'https://grafana.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de/login/generic_oauth'
+
+envVars:
+  - name: "EXT_DEX_LDAP_HOST"
+    valueFrom:
+      secretKeyRef:
+        name: ext-dex
+        key: ldap_host
+  - name: "EXT_DEX_LDAP_BINDDN"
+    valueFrom:
+      secretKeyRef:
+        name: ext-dex
+        key: ldap_binddn
+  - name: "EXT_DEX_LDAP_BINDPW"
+    valueFrom:
+      secretKeyRef:
+        name: ext-dex
+        key: ldap_bindpw
+  - name: "EXT_DEX_LDAP_BASEDN"
+    valueFrom:
+      secretKeyRef:
+        name: ext-dex
+        key: ldap_basedn
+  - name: "EXT_DEX_GRAFANA_SECRET"
+    valueFrom:
+      secretKeyRef:
+        name: ext-dex
+        key: grafana_secret
+
+service:
+  ports:
+    http:
+      port: 80
+    https:
+      port: 443
+    grpc:
+      port: 5557
+
+volumes:
+  - name: pkibw-ca-certs
+    configMap:
+      name: pkibw-ca-certs
+
+volumeMounts:
+  - mountPath: /etc/ssl/certs/pkibw-ca-bundle.pem
+    name: pkibw-ca-certs
+    subPath: root-certs.crt

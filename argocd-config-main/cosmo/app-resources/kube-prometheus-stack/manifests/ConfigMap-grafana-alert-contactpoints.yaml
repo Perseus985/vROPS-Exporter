@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-contactpoints
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert-contactpoints.yaml: |-
+    apiVersion: 1
+    contactPoints:
+        - orgId: 1
+          name: ORCA Contact
+          receivers:
+            - uid: orca_contact_0
+              type: email
+              settings:
+                addresses: bwi.fp.cloud-orchestration@bwi.de
+                singleEmail: false
+                message: '{{ template "alerts.message" . }}'
+              disableResolveMessage: false

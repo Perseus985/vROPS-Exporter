@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orca-grafana-datasource-configmap-prometheus
+  labels:
+    grafana_datasource: "1"
+data:
+  datasources-orca.yaml: |-
+    apiVersion: 1
+    datasources:
+      - name: orca-monitoring-prometheus
+        type: prometheus
+        url: http://kps-orca-prometheus.monitoring.svc:9090
+        access: proxy
+        isDefault: true
+        jsonData:
+          httpMethod: POST
+          timeInterval: 30s
+      - name: prodgitlab
+        type: prometheus
+        url: https://orca-gl-metrics.sgw.cloud.bwi.intranet-bw.de
+        access: proxy
+        isDefault: false
+        jsonData:
+          httpMethod: POST
+          timeInterval: 30s

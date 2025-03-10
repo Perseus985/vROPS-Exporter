@@ -1,0 +1,40 @@
+default:
+  tags:
+    - offen
+    - docker
+    - integratordev
+kubectl-login:
+  stage: .pre
+  image:
+    name: service-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/konvoi/code/curl-kubectl-rootless:0.1.3
+    entrypoint: [""]
+  script:
+    - curl -O "https://199.8.153.2/wcp/plugin/linux-amd64/vsphere-plugin.zip" -k
+    - unzip -j vsphere-plugin.zip
+    - export KUBECONFIG=${CI_PROJECT_DIR}/config
+    - ./kubectl-vsphere login --server=199.8.153.2 --insecure-skip-tls-verify --vsphere-username="${kube_username}@padi.intdev.cloud.bwi.intranet-bw.de" --tanzu-kubernetes-cluster-namespace="i0000007vpc0000017" --tanzu-kubernetes-cluster-name="cosmo"
+    - echo "TF_VAR_kube_config=$KUBECONFIG" >> kube.env
+  artifacts:
+    access: 'developer'
+    expire_in: 1 hrs
+    paths:
+      - ${CI_PROJECT_DIR}/config
+    reports:
+       dotenv: kube.env
+
+include:
+  - component: $CI_SERVER_FQDN/Global/public/gitlab-components/tofu/gitlab-ci-tofu@1.2.0
+    inputs:
+      image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry.gitlab.com/orca5874434/container-images/tofu/orca-1.9.0:1.11.0
+      tflint-args: "--recursive"
+      prod-enabled: true
+      checkov-enabled: true
+      infracost-enabled: false
+      fmt-enabled: true
+      validate-enabled: true
+  - component: $CI_SERVER_FQDN/Global/public/gitlab-components/semantic-release/gitlab-ci-semrel@1.4.0
+    inputs:
+      changelog-enabled: true
+      auto-release-enabled: true
+      commit-spec: conventionalcommits
+      

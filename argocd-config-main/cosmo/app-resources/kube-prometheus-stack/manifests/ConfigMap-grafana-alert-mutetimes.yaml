@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-mutetimes
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert-mutetimes.yaml: |-
+    apiVersion: 1
+    muteTimes:
+        - orgId: 1
+          name: ORCA
+          time_intervals:
+            - times:
+                - start_time: "00:00"
+                  end_time: "23:59"
+              weekdays: [saturday, sunday]
+              location: Europe/Berlin

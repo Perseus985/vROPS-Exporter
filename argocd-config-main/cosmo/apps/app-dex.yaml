@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dex
+  namespace: argocd-integrator
+spec:
+  project: integrator
+  syncPolicy:
+    automated:
+      prune: false  # Specifies if resources should be pruned during auto-syncing ( false by default ).
+      selfHeal: true  # Specifies if partial app sync should be executed when resources are changed only in target Kubernetes cluster and no git change detected ( false by default ).
+    # finalizers:
+    #  - resources-finalizer.argocd.argoproj.io
+    syncOptions:
+      - ApplyOutOfSyncOnly=true  # Specifies if applies every object in the application or only out of sync.
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:  # The labels to set on the application namespace
+        pod-security.kubernetes.io/enforce: privileged
+  destination:
+    namespace: orca-dex
+    server: https://kubernetes.default.svc
+  sources:
+    - repoURL: https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config
+      targetRevision: main
+      ref: values
+    - chart: dex
+      repoURL: "https://artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/repository/i0000007-chart-scanned"
+      targetRevision: 0.19.1
+      helm:
+        valueFiles:
+          - $values/cosmo/app-resources/dex/helm/values.yaml
+        releaseName: dex
+    - repoURL: https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config
+      targetRevision: main
+      path: cosmo/app-resources/dex/manifests/

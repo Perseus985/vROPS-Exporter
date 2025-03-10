@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-generic
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert-generic.yaml: |-
+    apiVersion: 1
+    groups:
+        - orgId: 1
+          name: Generic
+          folder: ORCA
+          interval: 1m
+          rules:
+            - uid: alert_generic_0
+              title: PVC Usage
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 604800
+                    to: 0
+                  datasourceUid: P4720E94DFB9B77CC
+                  model:
+                    adhocFilters: []
+                    datasource:
+                        type: prometheus
+                        uid: P4720E94DFB9B77CC
+                    editorMode: code
+                    expr: |
+                        max without(instance,node,service) (
+                        (
+                          kubelet_volume_stats_capacity_bytes{cluster="", job="kubelet", metrics_path="/metrics", namespace="monitoring"}
+                          -
+                          kubelet_volume_stats_available_bytes{cluster="", job="kubelet", metrics_path="/metrics", namespace="monitoring"}
+                        )
+                        /
+                        kubelet_volume_stats_capacity_bytes{cluster="", job="kubelet", metrics_path="/metrics", namespace="monitoring"}
+                        * 100)
+                    instant: true
+                    interval: ""
+                    intervalMs: 60000
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 75
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: 919b92a8e8041bd567af9edab12c840c
+              panelId: 2
+              noDataState: NoData
+              execErrState: Error
+              for: 1m
+              annotations:
+                __dashboardUid__: 919b92a8e8041bd567af9edab12c840c
+                __panelId__: "2"
+              labels:
+                managedBy: ORCA
+              isPaused: false

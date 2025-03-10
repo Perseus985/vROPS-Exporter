@@ -1,0 +1,754 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-gitlab
+  namespace: monitoring
+  labels:
+    orca-grafana-alert: "1"
+data:
+  grafana-alert.yaml: |-
+    apiVersion: 1
+    groups:
+        - orgId: 1
+          name: GitLab
+          folder: ORCA
+          interval: 1m
+          rules:
+            - uid: alert_gitlab_0
+              title: Service Availability
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 86400
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    adhocFilters: []
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    expr: "\n        min(\n          min_over_time(\n            gitlab_sli:job:availability:ratio[30s]\n          )\n        ) by (job)\n        "
+                    format: time_series
+                    instant: false
+                    interval: 1m
+                    intervalFactor: 3
+                    intervalMs: 30000
+                    legendFormat: '{{ job }} service'
+                    maxDataPoints: 43200
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params: []
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - B
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    reducer: last
+                    refId: B
+                    type: reduce
+                - refId: C
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: B
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: C
+                    type: threshold
+              dashboardUid: general-service
+              panelId: 9
+              noDataState: NoData
+              execErrState: Error
+              for: 1m
+              annotations:
+                __dashboardUid__: general-service
+                __panelId__: "9"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_1
+              title: Puma Queueing
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: avg_over_time(puma_queued_connections[30m])
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: 36owr67Wz
+              panelId: 2
+              noDataState: NoData
+              execErrState: Error
+              for: 1m
+              annotations:
+                __dashboardUid__: 36owr67Wz
+                __panelId__: "2"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_2
+              title: Service Down
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: avg_over_time(up[5m]) * 100
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 50
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: general-service
+              panelId: 9
+              noDataState: NoData
+              execErrState: Error
+              for: 3m
+              annotations:
+                __dashboardUid__: general-service
+                __panelId__: "9"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_3
+              title: High Puma Utilization
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 3600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: instance:puma_utilization:ratio * 100
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 90
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: NoData
+              execErrState: Error
+              for: 1h
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_4
+              title: Sidekiq Jobs Queuing
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: sum by (name) (sidekiq_queue_size)
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: wsSteMemz
+              panelId: 12
+              noDataState: NoData
+              execErrState: Error
+              for: 1h
+              annotations:
+                __dashboardUid__: wsSteMemz
+                __panelId__: "12"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_5
+              title: High gRPC Resource Exhausted Rate
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: "sum without (grpc_code, grpc_method, grpc_service, grpc_type) (\r\n        rate(grpc_server_handled_total{grpc_code=\"ResourceExhausted\"}[5m])\r\n      ) /\r\n      sum without (grpc_code, grpc_method, grpc_service, grpc_type) (\r\n        rate(grpc_server_handled_total[5m])\r\n      ) * 100"
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: NoData
+              execErrState: Error
+              for: 1h
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_6
+              title: Postgres Database Deadlocks
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: increase(pg_stat_database_deadlocks[5m])
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: c_LJgXfmk
+              panelId: 8
+              noDataState: NoData
+              execErrState: Error
+              for: 0s
+              annotations:
+                __dashboardUid__: c_LJgXfmk
+                __panelId__: "8"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_7
+              title: Postgres Database Deadlock Cancels
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: increase(pg_stat_database_deadlocks[5m])
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: NoData
+              execErrState: Error
+              for: 0s
+              annotations: {}
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_8
+              title: Workhorse Low QPS High Error Rate
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: "(\r\n  sum without (job, code) (\r\n    job_route_method_code:gitlab_workhorse_http_request_duration_seconds_count:rate5m{code=~\"5..\"}\r\n  ) /\r\n  sum without (job,code) (\r\n    job_route_method_code:gitlab_workhorse_http_request_duration_seconds_count:rate5m\r\n  ) < 10\r\n) * 100\r\n"
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 50
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: wsSteMemz
+              panelId: 13
+              noDataState: NoData
+              for: 0s
+              execErrState: Error
+              annotations:
+                __dashboardUid__: wsSteMemz
+                __panelId__: "13"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_9
+              title: Workhorse High QPS High Error Rate
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: "(\r\n  sum without (job, code) (\r\n    job_route_method_code:gitlab_workhorse_http_request_duration_seconds_count:rate5m{code=~\"5..\"}\r\n  ) /\r\n  sum without (job,code) (\r\n    job_route_method_code:gitlab_workhorse_http_request_duration_seconds_count:rate5m\r\n  ) > 10\r\n) * 100"
+                    instant: true
+                    intervalMs: 1000
+                    legendFormat: __auto
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              dashboardUid: SIHl30qik
+              panelId: 10
+              noDataState: KeepLast
+              execErrState: Error
+              for: 0s
+              annotations:
+                __dashboardUid__: SIHl30qik
+                __panelId__: "10"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+            - uid: alert_gitlab_10
+              title: High 4xx Code Request Count
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: PC2AA600EC0ABB465
+                  model:
+                    adhocFilters: []
+                    datasource:
+                        type: prometheus
+                        uid: PC2AA600EC0ABB465
+                    editorMode: code
+                    expr: |-
+                        sum without (instance, job, host, code) (
+                          rate(nginx_vts_server_requests_total{code=~"4.."}[30s])
+                        ) /
+                        sum without (instance, job, host, code) (
+                          rate(nginx_vts_server_requests_total[30s])
+                        ) * 100
+                    format: time_series
+                    instant: false
+                    interval: 1m
+                    intervalFactor: 1
+                    intervalMs: 30000
+                    legendFormat: '{{code}} {{host}}'
+                    maxDataPoints: 43200
+                    range: false
+                    refId: A
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params: []
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - B
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    reducer: last
+                    refId: B
+                    type: reduce
+                - refId: C
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 20
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: B
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: C
+                    type: threshold
+              dashboardUid: SIHl30qik
+              panelId: 10
+              noDataState: NoData
+              execErrState: Error
+              for: 1m
+              annotations:
+                __dashboardUid__: SIHl30qik
+                __panelId__: "10"
+              isPaused: false
+              labels:
+                managedBy: ORCA
+        - orgId: 1
+          name: Blackbox Exporter
+          folder: ORCA
+          interval: 1m
+          rules:
+            - uid: alert_blackbox_0
+              title: Blackbox Success
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: P4720E94DFB9B77CC
+                  model:
+                    adhocFilters: []
+                    datasource:
+                        type: prometheus
+                        uid: P4720E94DFB9B77CC
+                    disableTextWrap: false
+                    editorMode: code
+                    expr: probe_success{job=~".+", instance=~".+"}
+                    format: table
+                    fullMetaSearch: false
+                    includeNullMetadata: true
+                    instant: true
+                    interval: ""
+                    intervalMs: 30000
+                    legendFormat: ""
+                    maxDataPoints: 43200
+                    refId: A
+                    useBackend: false
+                - refId: B
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                                - I
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                    datasource:
+                        type: __expr__
+                        uid: __expr__
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: NoData
+              execErrState: Error
+              for: 3m
+              isPaused: false
+              labels:
+                managedBy: ORCA

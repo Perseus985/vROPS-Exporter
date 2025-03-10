@@ -1,0 +1,10 @@
+vault_address            = "https://vault.konvoi.svc.intdev.cloud.bwi.intranet-bw.de"
+vault_namespace          = "i0000007"
+vault_backend            = "orcadev"
+vault_kv_engine_name     = "orca-secrets"
+argocd_url               = "https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config.git"
+argocd_project           = "integrator"
+argocd_helm_url          = "https://artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/repository/i0000007-chart-scanned"
+argocd_helm_name         = "i0000007-chart-scanned"
+gitlab_argocd_project_id = 808
+gitlab_base_url          = "https://provgitlab.sgw.cloud.bwi.intranet-bw.de"

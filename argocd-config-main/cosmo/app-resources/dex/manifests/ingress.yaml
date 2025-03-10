@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dex
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - dex.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+      secretName: dex-tls
+  rules:
+    - host: dex.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: dex
+                port:
+                  name: http

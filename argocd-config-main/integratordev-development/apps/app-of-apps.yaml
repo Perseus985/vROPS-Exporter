@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd-integrator
+spec:
+  destination:
+    namespace: argocd-integrator
+    server: https://kubernetes.default.svc
+  project: integrator
+  sources:
+    - repoURL: https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config.git
+      targetRevision: HEAD
+      path: apps
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-kps-orca-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: grafana-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: kps-orca-grafana
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - grafana-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+      secretName: grafana-kps-orca-tls

@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: prometheus.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: kps-orca-prometheus
+                port:
+                  number: 9090
+  tls:
+    - hosts:
+        - prometheus.cosmo.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+      secretName: prometheus-tls

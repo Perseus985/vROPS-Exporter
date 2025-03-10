@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: provider-gitlab-runner
+  namespace: argocd-integrator
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: provider-gitlab-runner
+    server: https://kubernetes.default.svc
+  project: integrator
+  sources:
+    - repoURL: https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config
+      targetRevision: HEAD
+      ref: values
+    - repoURL: https://provgitlab.sgw.cloud.bwi.intranet-bw.de/Offen/CldOr_I0000007/argocd-config
+      targetRevision: HEAD
+      path: app-resources/provider-gitlab-runner/manifests
+    - chart: gitlab-runner
+      repoURL: "https://artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/repository/i0000007-chart-scanned"
+      targetRevision: 0.71.0
+      helm:
+        valueFiles:
+          - $values/app-resources/provider-gitlab-runner/helm/values-provider-gitlab-runner.yaml
+
+  syncPolicy:
+    # syncOptions:
+    #   - CreateNamespace=true
+    automated:
+      selfHeal: true
+      prune: true
