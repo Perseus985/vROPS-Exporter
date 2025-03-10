@@ -1,3 +1,4 @@
+# Base template for getting vRA token
 .get-token-curl:
   before_script:
     - echo Prüfe ob die notwendigen Variablen gesetzt sind
@@ -29,3 +30,96 @@
     when: on_success
   rules:
     - when: always
+
+# Environment-specific token jobs
+dev:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    TF_VAR_vra_url: $VRA_DEV_URL
+    TF_STATE_NAME: dev
+  environment:
+    name: development
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dev/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+test:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    TF_VAR_vra_url: $VRA_TEST_URL
+    TF_STATE_NAME: test
+  environment:
+    name: testing
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/test/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+staging:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    TF_VAR_vra_url: $VRA_STAGING_URL
+    TF_STATE_NAME: staging
+  environment:
+    name: staging
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/staging/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+prod:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    TF_VAR_vra_url: $VRA_PROD_URL
+    TF_STATE_NAME: prod
+  environment:
+    name: production
+    url: https://vra-prod.example.com
+    action: prepare
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/prod/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
+
+dr:get-token:
+  stage: getVraToken
+  extends: .get-token-curl
+  variables:
+    TF_VAR_vra_url: $VRA_DR_URL
+    TF_STATE_NAME: dr
+  environment:
+    name: disaster-recovery
+    url: https://vra-dr.example.com
+    action: prepare
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - blueprints/*.yml
+        - environments/dr/**/*
+        - modules/**/*
+        - main.tf
+        - variables.tf
