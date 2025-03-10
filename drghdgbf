@@ -1,240 +1,73 @@
-# Main GitLab CI file (.gitlab-ci.yml)
-stages:
-  - validate
-  - plan
-  - apply
-  - destroy
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: always
+    - when: always  # Run pipeline for all cases
+
+default:
+  tags:
+    - docker
+
+image: registry.gitlab.com/your-org/container-images/tofu/vra-automation:latest
+cache:
+  key: "${TF_ROOT}"
+  paths:
+    - "${TF_ROOT}/.terraform/"
+    - "~./terraform.d/"
+
+variables:
+  IGNORE_TF_DEPRECATION_WARNING: true
+  TF_ROOT: ${CI_PROJECT_DIR}
 
 include:
   - component: 'https://gitlab.com/components/opentofu@1.0.0'
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
+  - local: '.gitlab/get_vra_token.yml'
   - local: 'environments/dev/.gitlab-ci.yml'
   - local: 'environments/test/.gitlab-ci.yml'
   - local: 'environments/staging/.gitlab-ci.yml'
   - local: 'environments/prod/.gitlab-ci.yml'
+  - local: 'environments/dr/.gitlab-ci.yml'
 
-# Environment-specific GitLab CI file (environments/dev/.gitlab-ci.yml)
-.dev_defaults: &dev_defaults
-  variables:
-    ENVIRONMENT: dev
-    TOFU_CLI_ARGS: "-no-color"
-    TF_ROOT: ${CI_PROJECT_DIR}
-    TF_VAR_FILE: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/terraform.tfvars
-    TF_BACKEND_CONFIG: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/backend.tfvars
-    TF_STATE_NAME: ${ENVIRONMENT}
+stages:
+  - getVraToken
+  - validate
+  - test
+  - plan
+  - apply
+  - cleanup
 
-dev:validate:
-  extends: .opentofu:validate
-  variables:
-    <<: *dev_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/dev/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
+.tofu-inject-creds:
+  before_script:
+    - mkdir -p ${HOME}/.terraform.d
+    - cat "${TF_AUTH}" > "${HOME}/.terraform.d/credentials.tfrc.json"
 
-dev:plan:
-  extends: .opentofu:plan
-  variables:
-    <<: *dev_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/dev/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  artifacts:
-    paths:
-      - ${TF_ROOT}/plan.tfplan
-    expire_in: 1 week
-
-dev:apply:
-  extends: .opentofu:apply
-  variables:
-    <<: *dev_defaults
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/dev/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  dependencies:
-    - dev:plan
-  when: manual
-
-# Environment-specific GitLab CI file (environments/test/.gitlab-ci.yml)
-.test_defaults: &test_defaults
-  variables:
-    ENVIRONMENT: test
-    TOFU_CLI_ARGS: "-no-color"
-    TF_ROOT: ${CI_PROJECT_DIR}
-    TF_VAR_FILE: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/terraform.tfvars
-    TF_BACKEND_CONFIG: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/backend.tfvars
-    TF_STATE_NAME: ${ENVIRONMENT}
-
-test:validate:
-  extends: .opentofu:validate
-  variables:
-    <<: *test_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/test/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-
-test:plan:
-  extends: .opentofu:plan
-  variables:
-    <<: *test_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/test/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  artifacts:
-    paths:
-      - ${TF_ROOT}/plan.tfplan
-    expire_in: 1 week
-
-test:apply:
-  extends: .opentofu:apply
-  variables:
-    <<: *test_defaults
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/test/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  dependencies:
-    - test:plan
-  when: manual
-
-# Environment-specific GitLab CI file (environments/staging/.gitlab-ci.yml)
-.staging_defaults: &staging_defaults
-  variables:
-    ENVIRONMENT: staging
-    TOFU_CLI_ARGS: "-no-color"
-    TF_ROOT: ${CI_PROJECT_DIR}
-    TF_VAR_FILE: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/terraform.tfvars
-    TF_BACKEND_CONFIG: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/backend.tfvars
-    TF_STATE_NAME: ${ENVIRONMENT}
-
-staging:validate:
-  extends: .opentofu:validate
-  variables:
-    <<: *staging_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/staging/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-
-staging:plan:
-  extends: .opentofu:plan
-  variables:
-    <<: *staging_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/staging/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  artifacts:
-    paths:
-      - ${TF_ROOT}/plan.tfplan
-    expire_in: 1 week
-
-staging:apply:
-  extends: .opentofu:apply
-  variables:
-    <<: *staging_defaults
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/staging/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  dependencies:
-    - staging:plan
-  when: manual
-
-# Environment-specific GitLab CI file (environments/prod/.gitlab-ci.yml)
-.prod_defaults: &prod_defaults
-  variables:
-    ENVIRONMENT: prod
-    TOFU_CLI_ARGS: "-no-color"
-    TF_ROOT: ${CI_PROJECT_DIR}
-    TF_VAR_FILE: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/terraform.tfvars
-    TF_BACKEND_CONFIG: ${CI_PROJECT_DIR}/environments/${ENVIRONMENT}/backend.tfvars
-    TF_STATE_NAME: ${ENVIRONMENT}
-
-prod:validate:
-  extends: .opentofu:validate
-  variables:
-    <<: *prod_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/prod/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-
-prod:plan:
-  extends: .opentofu:plan
-  variables:
-    <<: *prod_defaults
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/prod/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  artifacts:
-    paths:
-      - ${TF_ROOT}/plan.tfplan
-    expire_in: 1 week
-
-prod:apply:
-  extends: .opentofu:apply
-  variables:
-    <<: *prod_defaults
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - blueprints/*.yml
-        - environments/prod/**/*
-        - modules/**/*
-        - main.tf
-        - variables.tf
-  dependencies:
-    - prod:plan
-  when: manual
+get-token:
+  stage: getVraToken
+  extends: .get-token-curl
   environment:
-    name: production
-    url: https://vra-prod.example.com
+    name: $TF_STATE_NAME
+    action: prepare
+
+fmt:
+  extends: .opentofu:fmt
+  needs: []
+
+ansible-lint:
+  image: your-registry/cldor-ansible-execution-environments:latest
+  stage: test
+  script:
+    - cd ansible
+    - ansible-lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
+
+kics-iac-sast:
+  stage: test
+  image: registry.gitlab.com/gitlab-org/security-products/analyzers/kics:latest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
