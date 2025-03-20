@@ -1,48 +1,405 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: orca-grafana-datasource-configmap-prometheus
-  labels:
-    grafana_datasource: "1"
-data:
-  datasources-orca.yaml: |-
-    apiVersion: 1
-    datasources:
-      - name: orca-monitoring-prometheus
-        type: prometheus
-        url: http://kps-orcadev-prometheus.monitoring.svc:9090
-        access: proxy
-        isDefault: true
-        jsonData:
-          httpMethod: POST
-          timeInterval: 30s
-      - name: prodgitlab
-        type: prometheus
-        url: https://orca-gl-metrics.sgw.cloud.bwi.intranet-bw.de
-        access: proxy
-        isDefault: false
-        jsonData:
-          httpMethod: POST
-          timeInterval: 30s
-      - name: vrops-intdev
-        type: vmware-ariaoperations-datasource
-        access: proxy
-        jsonData:
-          authSource: "vIDMAuthSource"
-          username:
-            name: vrops-intdev-credentials
-            key: username
-          password:
-            name: vrops-intdev-credentials
-            key: password
-          tlsSkipVerify: false
-          host: boe-ind-ops-00.mgmt.intdev.cloud.bwi.intranet-bw.de
-      - name: vrops-provdev
-        type: vmware-ariaoperations-datasource
-        access: proxy
-        jsonData:
-          authSource: "vIDMAuthSource"
-          username: "${vrops-provdev-credentials:username}"
-          password: "${vrops-provdev-credentials:password}"
-          tlsSkipVerify: false
-          host: boe-prd-ops-00.mgmt.provdev.cloud.bwi.intranet-bw.de
+fullnameOverride: kps-orca
+
+global:
+  imageRegistry: "i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de"
+
+  ## Reference to one or more secrets to be used when pulling images
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+  ##
+  imagePullSecrets:
+    - name: "pullsecret-ociregistry"
+
+grafana:
+  deploymentStrategy:
+    type: Recreate # to fix multiple mount of pvc when doing rolling update
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: "stgpcy-tanzuenabledstorage-latebinding"
+    subPath: "grafana-storage"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 500Mi
+    limits:
+      memory: 500Mi
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: username
+    passwordKey: password
+  image:
+    repository: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry.gitlab.com/orca5874434/container-images/omega-grafana
+    tag: "1.7.0"
+
+  initContainers:
+    - name: datasource-config
+      image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry-1.docker.io/alpine/curl:8.11.1
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          INTDEV_USERNAME=$(cat /secrets/intdev/username)
+          INTDEV_PASSWORD=$(cat /secrets/intdev/password)
+          PROVDEV_USERNAME=$(cat /secrets/provdev/username)
+          PROVDEV_PASSWORD=$(cat /secrets/provdev/password)
+          cat > /datasources/datasources-orca.yaml << EOF
+          apiVersion: 1
+          datasources:
+            - name: orca-monitoring-prometheus
+              type: prometheus
+              url: http://kps-orcadev-prometheus.monitoring.svc:9090
+              access: proxy
+              isDefault: true
+              jsonData:
+                httpMethod: POST
+                timeInterval: 30s
+            - name: prodgitlab
+              type: prometheus
+              url: https://orca-gl-metrics.sgw.cloud.bwi.intranet-bw.de
+              access: proxy
+              isDefault: false
+              jsonData:
+                httpMethod: POST
+                timeInterval: 30s
+            - name: vrops-intdev
+              type: vmware-ariaoperations-datasource
+              access: proxy
+              jsonData:
+                authSource: "vIDMAuthSource"
+                username: "$INTDEV_USERNAME"
+                tlsSkipVerify: false
+                host: boe-ind-ops-00.mgmt.intdev.cloud.bwi.intranet-bw.de
+              secureJsonData:
+                password: "$INTDEV_PASSWORD"
+            - name: vrops-provdev
+              type: vmware-ariaoperations-datasource
+              access: proxy
+              jsonData:
+                authSource: "vIDMAuthSource"
+                username: "$PROVDEV_USERNAME"
+                tlsSkipVerify: false
+                host: boe-prd-ops-00.mgmt.provdev.cloud.bwi.intranet-bw.de
+              secureJsonData:
+                password: "$PROVDEV_PASSWORD"
+          EOF
+      volumeMounts:
+        - name: intdev-secrets
+          mountPath: /secrets/intdev
+        - name: provdev-secrets
+          mountPath: /secrets/provdev
+        - name: datasources-volume
+          mountPath: /datasources
+  
+
+    # Kritisch: Schema für Init-Container zum kopieren der Plugins
+  extraInitContainers:
+    - name: plugins-init
+      image: i0000007-image-scanned.artifacts.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/registry.gitlab.com/orca5874434/container-images/omega-grafana:1.7.0
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          echo "Kopiere vorinstallierte Plugins..."
+          ls -la /var/lib/grafana/plugins/
+          mkdir -p /var/lib/grafana/plugins-temp
+          cp -R /var/lib/grafana/plugins/* /var/lib/grafana/plugins-temp/ || true
+          ls -la /var/lib/grafana/plugins-temp/
+          echo "Plugins wurden kopiert."
+      volumeMounts:
+        - name: plugins-volume
+          mountPath: /var/lib/grafana/plugins-temp
+  extraVolumes:
+    - name: plugins-volume
+      emptyDir: {}
+    - name: intdev-secrets
+      secret:
+        secretName: vrops-intdev-credentials
+    - name: provdev-secrets
+      secret:
+        secretName: vrops-provdev-credentials
+    - name: datasources-volume
+      emptyDir: {}
+  
+  extraVolumeMounts:
+      - name: plugins-volume
+        mountPath: /var/lib/grafana/plugins
+      - name: datasources-volume
+        mountpath: /etc/grafana/provisioning/datasources
+  
+  envFromSecret: "vrops-intdev-credentials"
+    
+  extraSecretMounts:
+    - name: custom-ca
+      mountPath: /etc/ssl/certs/ca-certificates.crt
+      subPath: "root-certs.crt"
+      secretName: pkibw-ca-certs
+      readOnly: true
+      defaultMode: 420
+    - name: auth-generic-oauth-secret-mount
+      secretName: grafana-auth-generic-oauth-secret
+      defaultMode: 0440
+      mountPath: /etc/secrets/auth_generic_oauth
+      readOnly: true
+    
+  sidecar:
+    image:
+      repository: quay.io/kiwigrid/k8s-sidecar
+      tag: "1.28.0"
+    dashboards:
+      enabled: true
+      folderAnnotation: "orca.grafana.dashboards/folder-name"
+      provider:
+        foldersFromFilesStructure: true
+    datasources: {}
+    notifiers:
+      enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+      limits:
+        memory: 100Mi
+  #ingress:
+  #  enabled: true
+  #  hosts:
+  #      - grafana-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+  #  ingressClassName: traefik
+  #  tls:
+  #    - secretName: grafana-kps-tls
+  #      hosts:
+  #      - grafana-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+  podAnnotations:
+    linkerd.io/inject: enabled
+  # plugins:
+  #   - https://<path-to-zip>;<plugin-name>
+  alerting:
+    contactpoints.yaml:
+      secret:
+        apiVersion: 1
+        contactPoints:
+          - orgId: 1
+            name: ORCA SMTP
+            receivers:
+              - uid: de9kkyd4ug5xcc
+                type: email
+                settings:
+                  addresses: cyrill.berg@bwi.de;vincent.spanjaart@bwi.de
+                  singleEmail: true
+                disableResolveMessage: false
+  grafana.ini:
+    server:
+      root_url: https://grafana-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+    auth:
+      oauth_allow_insecure_email_lookup: true
+    auth.generic_oauth:
+      enabled: true
+      client_id: grafana-kps
+      client_secret: $__file{/etc/secrets/auth_generic_oauth/client_secret}
+      scopes: openid profile email groups
+      skip_org_role_sync: false
+      auth_url: https://dex.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de/auth
+      token_url: https://dex.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de/token
+      api_url: https://dex.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de/userinfo
+      role_attribute_path: contains(groups, 'CIP-044Service-GA-DevOps-Developer') && 'Admin' || 'Viewer'
+      tls_client_ca: /etc/ssl/certs/ca-certificates.crt
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+      check_for_plugin_updates: false
+    smtp:
+      enabled: true
+      host: smtp.sgw.cloud.bwi.intranet-bw.de:587
+      from_address: "grafana@cloud-orchestration.svc"
+      from_name: "ORCA Grafana"
+      startTLS_policy: "MandatoryStartTLS"
+    users:
+      viewers_can_edit: true # Viewers can access and use Explore and perform temporary edits on panels in dashboards they have access to. They cannot save their changes.
+    plugins:
+      allow_loading_unsigned_plugins: "yesoreyeram-infinity-datasource,grafana-oncall-app,vmware-ariaoperations-datasource"
+    paths:
+      plugins: "/var/lib/grafana/plugins"
+  smtp:
+    # `existingSecret` is a reference to an existing secret containing the smtp configuration
+    # for Grafana.
+    existingSecret: "grafana-smtp-credentials"
+    userKey: "username"
+    passwordKey: "password"
+  initChownData:
+    image:
+      repository: registry-1.docker.io/library/busybox
+      tag: "1.31.1"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 50Mi
+      limits:
+        memory: 50Mi
+
+prometheus-node-exporter:
+  image:
+    repository: quay.io/prometheus/node-exporter
+    tag: "v1.8.2"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 50Mi
+    limits:
+      memory: 50Mi
+  prometheus:
+    monitor:
+      scrapeTimeout: 30s
+  hostNetwork: false
+
+kube-state-metrics:
+  image:
+    repository: registry.k8s.io/kube-state-metrics/kube-state-metrics
+    tag: "v2.14.0"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+    limits:
+      memory: 200Mi
+
+alertmanager:
+  ingress:
+    enabled: true
+    hosts:
+      - alertmanager-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+    ingressClassName: traefik
+    tls:
+      - secretName: alertmanager-tls
+        hosts:
+          - alertmanager-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+
+  # config:
+  #   route:
+  #     routes:
+  #       - receiver: "oncall"
+  #     group_by: [alertname, datacenter, app]
+  #     receiver: "oncall"
+  #   receivers:
+  #     - name: "oncall"
+  #       webhook_configs:
+  #         - url: https://oncall.konvoi.svc.intdev.cloud.bwi.intranet-bw.de/integrations/v1/alertmanager/b0oKU7weOj71sn2WqOwkxl3At/
+  #           send_resolved: true
+  #           max_alerts: 100
+  alertmanagerSpec:
+    externalUrl: https://alertmanager-kps.orcadev.i0000007vpc0000017.svc.intdev.cloud.bwi.intranet-bw.de
+    image:
+      repository: quay.io/prometheus/alertmanager
+      tag: "v0.27.0"
+    # -- Additional volumeMounts to the server main container
+    volumeMounts:
+      - mountPath: /etc/ssl/certs/pkibw-ca-bundle.pem
+        name: pkibw-ca-certs
+        subPath: root-certs.crt
+
+    # -- Additional volumes to the server pod
+    volumes:
+      - name: pkibw-ca-certs
+        secret:
+          secretName: pkibw-ca-certs
+
+prometheusOperator:
+  admissionWebhooks:
+    patch:
+      image:
+        repository: registry.k8s.io/ingress-nginx/kube-webhook-certgen
+        tag: v20221220-controller-v1.5.1-58-g787ea74b6
+  image:
+    repository: quay.io/prometheus-operator/prometheus-operator
+    tag: "v0.79.2"
+  prometheusConfigReloader:
+    image:
+      repository: quay.io/prometheus-operator/prometheus-config-reloader
+      tag: "v0.79.2"
+
+kubeControllerManager:
+  enabled: false
+
+coreDns:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+crds:
+  enabled: false
+
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false # etcd monitoring not possible at the moment (https://jira.bwi-intranet.de/browse/KONVOI-1074)
+    configReloaders: true
+    general: true
+    k8sContainerCpuUsageSecondsTotal: true
+    k8sContainerMemoryCache: true
+    k8sContainerMemoryRss: true
+    k8sContainerMemorySwap: true
+    k8sContainerResource: true
+    k8sContainerMemoryWorkingSetBytes: true
+    k8sPodOwner: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubeControllerManager: false # kube-controller-manager monitoring not possible at the moment (https://jira.bwi-intranet.de/browse/KONVOI-1074)
+    kubelet: false # kubelet monitoring not possible at the moment (https://jira.bwi-intranet.de/browse/KONVOI-1074)
+    kubeProxy: false # kube-proxy monitoring not possible at the moment (https://jira.bwi-intranet.de/browse/KONVOI-1074)
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeSchedulerAlerting: false # kube-scheduler monitoring not possible at the moment (https://jira.bwi-intranet.de/browse/KONVOI-1074)
+    kubeSchedulerRecording: false # kube-scheduler monitoring not possible at the moment (https://jira.bwi-intranet.de/browse/KONVOI-1074)
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true
+    windows: false
+
+  ## Reduce app namespace alert scope
+  appNamespacesTarget: "(kube-system|tkg-system|vmware-system-auth|vmware-system-cloud-provider|vmware-system-csi|vmware-system-tkg|dev-monitoring|dex)"
+
+prometheus:
+  service:
+    labels:
+      mirror.linkerd.io/exported: "true"
+  prometheusSpec:
+    image:
+      repository: quay.io/prometheus/prometheus
+      tag: "v3.1.0"
+    # Remove selectors to match all monitors from all namespaces
+    serviceMonitorSelector:
+      matchLabels: null
+    podMonitorSelector:
+      matchLabels: null
+    probeSelector:
+      matchLabels: null
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    podMetadata:
+      annotations:
+        linkerd.io/inject: enabled
+    retention: 1d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: stgpcy-tanzuenabledstorage-latebinding
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100Gi
