@@ -1,2 +1,16 @@
+User Story
 
-Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "/bin/bash": stat /bin/bash: no such file or directory: unknown
+Als Entwickler im Team ORCA möchte ich eine Lösung finden, wie wir in Zukunft Grafana as Code verwalten.
+
+
+
+Es soll herausgefunden werden, wie wir das im Team handhaben wollen.
+
+Grafana as code: A complete guide to tools, tips, and tricks
+
+Akzeptanzkriterien
+Die Lösung kann auf alle Grafana Instanzen (im Team) angewandt werden
+Es wurde ermittelt welche Voraussetzungen wir brauchen um Grafana mit (Tool) anfassen zu können.
+Die Lösung wird im Team vorgestellt
+Es wird eine Einigung erzielt
+Tickets zur Umsetzung werden definiert
